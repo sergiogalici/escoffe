@@ -1,0 +1,79 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+
+  html,
+  body {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-paper text-ink font-body antialiased;
+    /* Subtle paper grain via layered radial noise */
+    background-image:
+      radial-gradient(
+        circle at 18% 12%,
+        rgba(224, 144, 31, 0.06),
+        transparent 42%
+      ),
+      radial-gradient(
+        circle at 82% 0%,
+        rgba(191, 90, 55, 0.05),
+        transparent 38%
+      );
+    background-attachment: fixed;
+  }
+
+  /* Native date input glyph tinted to match ink */
+  ::-webkit-calendar-picker-indicator {
+    filter: invert(12%) sepia(8%) saturate(900%) hue-rotate(350deg);
+    cursor: pointer;
+  }
+}
+
+@layer components {
+  .field {
+    @apply w-full rounded-xl border border-ink/10 bg-paper/60 px-4 py-2.5
+           text-ink placeholder:text-ink-soft/50 outline-none transition
+           focus:border-saffron focus:ring-2 focus:ring-saffron/25;
+  }
+
+  .label {
+    @apply mb-1.5 block text-xs font-medium uppercase tracking-[0.14em] text-ink-soft;
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl bg-ink
+           px-5 py-2.5 font-medium text-paper transition
+           hover:bg-terracotta focus:outline-none focus:ring-2
+           focus:ring-saffron/40 active:scale-[0.98] disabled:opacity-40;
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl border
+           border-ink/10 px-4 py-2 text-ink-soft transition
+           hover:border-ink/25 hover:text-ink focus:outline-none
+           focus:ring-2 focus:ring-saffron/30;
+  }
+}
+
+/* Staggered entrance for list cards */
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-rise {
+  animation: rise 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
