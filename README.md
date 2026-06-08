@@ -12,7 +12,12 @@ Built with **Tauri 2**, **Svelte 5** (runes API), **TypeScript**, and **Tailwind
 
 ## Features
 
-- **Add, edit and remove ingredients** — name, quantity, expiration date, notes.
+- **Add, edit and remove ingredients** — name, expiration date, and free-form notes (use them for quantity or recipe ideas).
+- **Smart name autocomplete** — every name you enter is remembered; typing offers accent- and case-insensitive fuzzy suggestions. Pick one or type a brand-new near-identical name — they stay distinct.
+- **Custom calendar date picker** — a polished popover, not the bare native input.
+- **Consumed vs wasted tracking** — mark each item from the pantry (with a confirmation step); it moves to a timestamped history log.
+- **Statistics** — a dedicated tab with overall totals, waste rate, monthly/yearly trends (once there's enough data), and a per-ingredient breakdown.
+- **Three-tab navigation drawer** — Dashboard (overview + what needs attention), Pantry (manage items), Stats.
 - **Expiration awareness** — items are color-coded and sorted by how soon they expire (fresh → soon → critical → expired).
 - **Desktop notifications** — get alerted on launch about ingredients that are expired or expiring soon.
 - **Local-first persistence** — data is stored on disk via `@tauri-apps/plugin-store` as a single JSON file. No network required.
@@ -32,17 +37,27 @@ Built with **Tauri 2**, **Svelte 5** (runes API), **TypeScript**, and **Tailwind
 
 ```
 src/
-  components/            Svelte UI components
-    IngredientForm.svelte
+  components/            Reusable UI components
+    DrawerNav.svelte       3-tab navigation drawer
+    DatePicker.svelte      Custom calendar popover
+    ConfirmDialog.svelte   Confirmation modal
+    IngredientForm.svelte  Add/edit + fuzzy name autocomplete
     IngredientList.svelte
     IngredientCard.svelte
     EmptyState.svelte
+    StatTile.svelte
+  views/                 One component per nav tab
+    DashboardView.svelte
+    PantryView.svelte
+    StatsView.svelte
   lib/
-    types/              TypeScript types (Ingredient)
-    stores/             Svelte 5 runes store (single source of truth)
+    types/              ingredient.ts · event.ts · catalog.ts
+    stores/             pantry.svelte.ts — Svelte 5 runes store (source of truth)
     persistence/        Disk I/O (plugin-store) + notifications
     calendar/           Pure expiration date math
-  App.svelte            Root component
+    stats/              Pure statistics derived from the event log
+    utils/              Fuzzy matcher
+  App.svelte            Root: nav drawer + tab switching
   main.ts               App entry point
   app.css               Tailwind + base styles
 src-tauri/              Rust backend (plugins, window)
@@ -50,19 +65,22 @@ src-tauri/              Rust backend (plugins, window)
 
 ### The core entity
 
-The whole app revolves around one type:
+The active pantry revolves around one type, persisted as a plain array:
 
 ```ts
 interface Ingredient {
   id: string;
   name: string;
-  quantity?: string;
   expirationDate: string; // ISO date, YYYY-MM-DD
-  notes?: string;
+  notes?: string;         // free-form: quantity or recipe ideas
+  addedAt: string;        // ISO timestamp
 }
 ```
 
-Persistence stores a plain `Ingredient[]` under a single key.
+When an item is consumed or wasted it is removed from the pantry and appended to
+a timestamped history log (`IngredientEvent[]`), which all statistics derive
+from. A separate name catalog (`CatalogEntry[]`) powers autocomplete.
+Persistence stores these three arrays under three keys in one JSON file.
 
 ## Getting started
 

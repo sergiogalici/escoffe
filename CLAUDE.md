@@ -25,53 +25,93 @@ dates. No backend, no account, no network. All data stays on the user's device.
 Everything — code, identifiers, comments, UI strings, docs, commit messages —
 is written in **English**. No exceptions.
 
-## Core entity (single source of data)
+## Core entity + history model
+
+The pantry is built from one core entity plus an append-only history log and a
+name catalog. All three persist as plain arrays via plugin-store (keys
+`ingredients`, `events`, `catalog`) in one file (`escoffe.json`).
 
 ```ts
+// The active pantry item (core entity)
 interface Ingredient {
   id: string;
   name: string;
-  quantity?: string;
   expirationDate: string; // ISO date YYYY-MM-DD
-  notes?: string;
+  notes?: string;         // free-form: quantity, recipe ideas, anything
+  addedAt: string;        // ISO timestamp
+}
+
+// History log entry — appended when an item is consumed/wasted, item removed
+interface IngredientEvent {
+  id: string;
+  name: string;
+  key: string;            // normalized name (links to catalog + stats grouping)
+  outcome: "consumed" | "wasted";
+  loggedAt: string;       // ISO timestamp
+  addedAt: string;        // for future shelf-life stats
+  expirationDate: string;
+}
+
+// Catalog of every name ever entered — powers fuzzy autocomplete
+interface CatalogEntry {
+  name: string;
+  key: string;            // normalized; dedupe by this ONLY (near-names stay distinct)
+  addedAt: string;
+  uses: number;
 }
 ```
 
-The app is, conceptually, a single `Ingredient[]`. Persistence stores exactly
-that array under one key (`ingredients`) in one file (`escoffe.json`).
+The event log is append-only and timestamped so new statistics (trends,
+shelf-life, seasonality) are pure derivations — no schema change needed.
 
 ## Architecture
 
 ```
 src/
   components/      Presentational Svelte components (no disk I/O)
+    DrawerNav · DatePicker · ConfirmDialog · IngredientForm ·
+    IngredientList · IngredientCard · EmptyState · StatTile
+  views/           One component per nav tab
+    DashboardView · PantryView · StatsView
   lib/
-    types/         Ingredient + derived types
-    stores/        ingredients.svelte.ts — runes store, single source of truth
+    types/         ingredient.ts · event.ts · catalog.ts
+    stores/        pantry.svelte.ts — runes store, single source of truth
     persistence/   store.ts (plugin-store), notify.ts (plugin-notification)
-    calendar/      expiration.ts — pure date math, no I/O, no framework
-  App.svelte       Root: wires store + components, owns "editing" UI state
+    calendar/      expiration.ts — pure date math
+    stats/         aggregate.ts — pure stats derived from the event log
+    utils/         fuzzy.ts — accent/case-insensitive fuzzy matcher
+  App.svelte       Root: nav drawer + tab switching + store init
   main.ts          mount() entry
   app.css          Tailwind layers + component classes
 src-tauri/         Rust: registers store + notification plugins, window config
 ```
+
+UI is a 3-tab navigation drawer: **Dashboard** (summary + at-risk),
+**Pantry** (add form + ingredient list), **Stats** (totals + month/year trends
++ per-ingredient breakdown).
 
 ### Layer rules (keep these boundaries)
 
 1. **Only `lib/persistence/store.ts` imports `@tauri-apps/plugin-store`.**
    Swapping persistence = editing one file.
 2. **Only `lib/persistence/notify.ts` imports `@tauri-apps/plugin-notification`.**
-3. **`lib/stores/ingredients.svelte.ts` is the single source of truth.**
-   Components mutate state only through its public API (`add`, `update`,
-   `remove`, `init`). They never touch persistence directly.
-4. **`lib/calendar/expiration.ts` stays pure** — date math only, no imports of
-   stores/persistence/Svelte. Easy to unit test.
-5. **Components are presentational** and receive data + callbacks via `$props()`.
+3. **`lib/stores/pantry.svelte.ts` is the single source of truth.** Components
+   mutate state only through its API (`add`, `update`, `remove`, `mark`,
+   `init`, `suggest`). They never touch persistence directly.
+4. **`lib/calendar/expiration.ts`, `lib/stats/aggregate.ts`, `lib/utils/fuzzy.ts`
+   stay pure** — no I/O, no Svelte, no store imports. Easy to unit test.
+5. **Components/views are presentational** and receive data + callbacks via
+   `$props()`. Marking consumed/wasted and removing always go through a
+   `ConfirmDialog`.
 
 ## Conventions
 
 - New IDs: `crypto.randomUUID()` (generated inside the store, never in the UI).
-- Dates are ISO `YYYY-MM-DD` strings everywhere; never store `Date` objects.
+- Dates: `expirationDate` is ISO `YYYY-MM-DD`; timestamps (`addedAt`,
+  `loggedAt`) are full ISO strings. Never store `Date` objects.
+- Name dedupe/grouping uses `normalize()` from `utils/fuzzy.ts` (lowercased,
+  accent-stripped, space-collapsed). Catalog/stats key off this; display keeps
+  original casing. Similar-but-different names must stay distinct.
 - Tailwind design tokens (colors, fonts) live in `tailwind.config.js`. Reuse the
   `paper`/`ink`/`saffron`/`terracotta` palette and the expiration status colors
   (`expired`/`critical`/`soon`/`fresh`) rather than hardcoding hex values.
